@@ -1,5 +1,5 @@
 # makemake
 
-An automatic Makefile generator (mainly used for my sanity).
+An automatic Makefile generator (mainly used for my sanity)
 
-See `makelist` for file format
+See `_make` for file format
