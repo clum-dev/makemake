@@ -1,0 +1,3 @@
+src makemake.c using 
+        clum-lib/strings.c
+        clum-lib/file.c
