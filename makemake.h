@@ -1,7 +1,7 @@
 #ifndef __MAKEMAKE_H__
 #define __MAKEMAKE_H__
 
-#include "strings.h"
+#include "clum-lib/strings.h"
 
 //
 struct Source {

@@ -2,21 +2,21 @@ CFLAGS=-Wall -Werror -pedantic -std=gnu99 -g
 .PHONY=all clean
 .DEFAULT_GOAL:=all
 
-OBJS_makemake=makemake.c strings.o file.o
+OBJS_makemake=makemake.c clum-lib/strings.o clum-lib/file.o
 
 all: makemake
 
 makemake: $(OBJS_makemake)
 	gcc $(CFLAGS) $(OBJS_makemake) -o makemake
 
-strings.o: strings.c strings.h
-	gcc $(CFLAGS) -c strings.c
+clum-lib/strings.o: clum-lib/strings.c clum-lib/strings.h
+	gcc $(CFLAGS) -o clum-lib/strings.o -c clum-lib/strings.c
 
-file.o: file.c file.h
-	gcc $(CFLAGS) -c file.c
+clum-lib/file.o: clum-lib/file.c clum-lib/file.h
+	gcc $(CFLAGS) -o clum-lib/file.o -c clum-lib/file.c
 
 
 clean:
 	rm -f makemake
-	rm -f strings.o
-	rm -f file.o
+	rm -f clum-lib/strings.o
+	rm -f clum-lib/file.o

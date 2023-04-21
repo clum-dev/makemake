@@ -1,14 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "makemake.h"
-#include "file.h"
-#include "strings.h"
+// #include "clum-lib/strings.h"
+#include "clum-lib/file.h"
 
 /**
  * TODO:    automatic makefile maker
  *  -   generate bash scripts for running the program
- * 
+ *  -   prompt user with files and _make (if none are present)
 */
 
 
@@ -55,7 +56,7 @@ Source* source_init(String* file, StringList* deps) {
 
     source->deps = sources_init();
     if (deps != NULL) {
-        for (size_t i = 0; i < deps->len; i++) {
+        for (size_t i = 0; i < deps->size; i++) {
             sources_add(source->deps, source_init(deps->strings[i], NULL));
         }
     }
@@ -201,7 +202,7 @@ StringList* get_deps(StringList* tokens, size_t index) {
 
     size_t i = index;
     // Add all other files until next source
-    while (i < tokens->len && !str_equals_text(tokens->strings[i], "src", false)) {
+    while (i < tokens->size && !str_equals_text(tokens->strings[i], "src", false)) {
         strlist_add(out, str_init(tokens->strings[i++]->text));
     }
 
@@ -213,13 +214,13 @@ Sources* get_sources(StringList* tokens) {
 
     Sources* out = sources_init();
 
-    for (size_t i = 0; i < tokens->len; i++) {
+    for (size_t i = 0; i < tokens->size; i++) {
         
         // Get source
         if (str_equals_text(tokens->strings[i], "src", false)) {
             
             int next = i + 1;
-            if (next == tokens->len) {
+            if (next == tokens->size) {
                 printf("ERROR: handle src bounds check");
             } else {
                 String* file = tokens->strings[++i];
@@ -232,12 +233,12 @@ Sources* get_sources(StringList* tokens) {
         if (str_equals_text(tokens->strings[i], "using", false)) {
             
             int next = i + 1;
-            if (next == tokens->len) {
+            if (next == tokens->size) {
                 printf("ERROR: handle src bounds check");
             } else {
                 StringList* deps = get_deps(tokens, ++i);
 
-                for (size_t i = 0; i < deps->len; i++) {
+                for (size_t i = 0; i < deps->size; i++) {
                     sources_add(out->sources[out->size - 1]->deps, source_init(deps->strings[i], NULL));
                 }
                 strlist_free(deps);
@@ -264,7 +265,7 @@ void write_source(FILE* fp, Source* source, bool isDep) {
         fprintf(fp, "\tgcc $(CFLAGS) $(%s) -o %s\n", source->objsTag->text, source->name->text);
     } else {
         fprintf(fp, "%s: %s %s\n", source->object->text, source->file->text, source->header->text);
-        fprintf(fp, "\tgcc $(CFLAGS) -c %s\n", source->file->text);
+        fprintf(fp, "\tgcc $(CFLAGS) -o %s -c %s\n", source->object->text, source->file->text);
     }
     fprintf(fp, "\n");
 
@@ -341,9 +342,73 @@ void write_makefile(Sources* sources, char* makepath) {
     fclose(fp);
 }
 
+//
+void generate_scripts(Sources* sources, String* path) {
+    printf("Generating bash scripts:\n\n");
+    
+    for (size_t i = 0; i < sources->size; i++) {
+
+        String* runStr = str_init("run");
+        str_concat_char(runStr, '_');
+        str_concat_text(runStr, sources->sources[i]->name->text);
+        str_concat_text(runStr, ".sh");
+
+        String* runPath = str_init(path->text);
+        str_concat_text(runPath, runStr->text);
+
+        String* checkRunStr = str_init("checkRun");
+        str_concat_char(checkRunStr, '_');
+        str_concat_text(checkRunStr, sources->sources[i]->name->text);
+        str_concat_text(checkRunStr, ".sh");
+
+        String* checkRunPath = str_init(path->text);
+        str_concat_text(checkRunPath, checkRunStr->text);
+
+        str_print(runPath, true);
+        str_print(checkRunPath, true);
+
+        FILE* run = open_file(runPath->text, "w");
+        fprintf(run, "#!/bin/bash\nname=%s\n\
+make && clear && clear && echo \"[RUN]\" && echo && ./$name $@ && echo\n", sources->sources[i]->name->text);
+        fclose(run);
+
+        FILE* checkRun = open_file(checkRunPath->text, "w");
+        fprintf(checkRun, "#!/bin/bash\nname=%s\n\
+make clean && clear && clear && make && clear && clear && echo \"[RUN - DEBUG]\" && echo -e\n\
+valgrind -s --leak-check=full --track-origins=yes --show-leak-kinds=all ./$name $@", sources->sources[i]->name->text);
+        fclose(checkRun);
+
+        str_free(runStr);
+        str_free(runPath);
+        str_free(checkRunStr);
+        str_free(checkRunPath);
+    }
+
+}
+
+//
+void print_help() {
+    printf("Usage: ./makemake <config filepath> <output filepath> {flags}\n");
+    printf("Makefile generator\n\n");
+
+    printf("Flags (requires that both config and output filepath are included):\n\n");
+    printf(" -s <path>\tGenerate bash scripts\n");
+    printf(" -L\t\tCopy library to directory\n");
+    
+    printf("\n");
+}
 
 //
 int main(int argc, char** argv) {
+
+    if (argc == 2 && !strcmp(argv[1], "--help")) {
+        print_help();
+        return 1;
+
+    } else if (argc < 3) { 
+        fprintf(stderr, "Usage: ./makemake <config file> <output filepath> {flags}\n");
+        return 1;
+    }
 
     char* path = argv[1];
     char* makepath = argv[2];
@@ -353,18 +418,47 @@ int main(int argc, char** argv) {
 
     StringList* tokens = str_split(text, ", \n");
     Sources* sources = get_sources(tokens);
-    
-    printf("sources:\n\n");
+
+    printf("Generating Makefile at '%s' with sources:\n\n", makepath);
     sources_print(sources);
-    printf("------------------\n");
+    printf("------------------\n\n");
 
     write_makefile(sources, makepath);
+
+    // Handle flags
+    if (argc >= 3) {
+        StringList* flags = strlist_init();
+        for (size_t i = 3; i < argc; i++) {
+            strlist_add(flags, str_init(argv[i]));
+        }
+
+        for (size_t i = 0; i < flags->size; i++) {
+            if (str_equals_text(flags->strings[i], "-s", true)) {
+                // get path
+                if (i == flags->size - 1) {
+                    fprintf(stderr, "Usage: -s <path>\n");
+                    break;
+                } else {
+                    generate_scripts(sources, flags->strings[++i]);
+                }
+            } else if (str_equals_text(flags->strings[i], "-L", true)) {
+                fprintf(stderr, "[UNIMP]\tCopy library files\n");
+            } else {
+                fprintf(stderr, "Unrecognised flag '%s'\n", flags->strings[i]->text);
+            }
+            printf("\n------------------\n");
+        }
+        
+        strlist_free(flags);
+    }
 
     strlist_free(tokens);
     str_free(text);
     sources_free(sources);
 
     fclose(fp);
+
+    printf("\nDone\n\n");
 
     return 0;
 }
