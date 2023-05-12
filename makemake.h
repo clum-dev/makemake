@@ -3,7 +3,7 @@
 
 #include "clum-lib/strings.h"
 
-//
+// Struct representing a source file (in its different forms)
 struct Source {
 
     String* name;       // src
@@ -22,7 +22,7 @@ struct Source {
 struct Source;
 typedef struct Source Source;
 
-//
+// Array of all sources in a project
 struct Sources {
 
     Source** sources;

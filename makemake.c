@@ -3,17 +3,15 @@
 #include <string.h>
 
 #include "makemake.h"
-// #include "clum-lib/strings.h"
 #include "clum-lib/file.h"
 
 /**
  * TODO:    automatic makefile maker
- *  -   generate bash scripts for running the program
  *  -   prompt user with files and _make (if none are present)
 */
 
 
-//
+// Gets the objs tag string of a source
 String* get_objs_tag(Source* source) {
     String* out = str_init("OBJS");
     str_concat_char(out, '_');
@@ -22,7 +20,7 @@ String* get_objs_tag(Source* source) {
     return out;
 }
 
-//
+// Get the object string of a source
 String* get_objs_str(Source* source) {
 
     String* out = str_init(source->objsTag->text);
@@ -38,7 +36,7 @@ String* get_objs_str(Source* source) {
     return out;
 }
 
-//
+// Initialises a source struct
 Source* source_init(String* file, StringList* deps) {
     
     Source* source = (Source*)malloc(sizeof(Source));
@@ -68,7 +66,7 @@ Source* source_init(String* file, StringList* deps) {
     return source;
 }
 
-//
+// Frees a source struct
 void source_free(Source* source) {
 
     if (source != NULL) {
@@ -106,7 +104,7 @@ void source_free(Source* source) {
     }
 }
 
-//
+// Prints all info in a source struct
 void source_print(Source* source) {
 
     str_print(source->file, true);
@@ -118,7 +116,7 @@ void source_print(Source* source) {
     }
 }
 
-//
+// Clones a source struct
 Source* source_clone(Source* source) {
 
     Source* out = (Source*)malloc(sizeof(Source));
@@ -126,15 +124,22 @@ Source* source_clone(Source* source) {
     out->file = str_init(source->file->text);
     out->header = str_init(source->header->text);
     out->object = str_init(source->object->text);
-    out->objsStr = str_init(source->objsStr->text);
+
+    if (source->objsStr != NULL) {
+        out->objsStr = str_init(source->objsStr->text);
+    } else {
+        out->objsStr = NULL;
+    }
+    out->objsTag = str_init(source->objsTag->text);
 
     out->deps = sources_clone(source->deps);
+
 
     return out;
 }
 
 
-//
+// Initialises a sources struct
 Sources* sources_init() {
 
     Sources* sources = (Sources*)malloc(sizeof(Sources));
@@ -144,7 +149,7 @@ Sources* sources_init() {
     return sources;
 }
 
-//
+// Frees a sources struct
 void sources_free(Sources* sources) {
 
     if (sources != NULL) {
@@ -162,7 +167,7 @@ void sources_free(Sources* sources) {
     }
 }
 
-//
+// Prints all info in a sources struct
 void sources_print(Sources* sources) {
 
     for (size_t i = 0; i < sources->size; i++) {
@@ -172,7 +177,7 @@ void sources_print(Sources* sources) {
 
 }
 
-//
+// Adds a source to a given sources array
 void sources_add(Sources* sources, Source* src) {
 
     if (sources->size == 0) {
@@ -184,10 +189,11 @@ void sources_add(Sources* sources, Source* src) {
     sources->sources[sources->size - 1] = src;
 }
 
-//
+// Clones a sources struct
 Sources* sources_clone(Sources* sources) {
 
-    Sources* out = (Sources*)malloc(sizeof(Sources));
+    Sources* out = sources_init();
+    out->size = 0;
     for (size_t i = 0; i < sources->size; i++) {
         sources_add(out, source_clone(sources->sources[i]));
     }
@@ -195,7 +201,27 @@ Sources* sources_clone(Sources* sources) {
     return out;
 }
 
-//
+// Removes a source at a given index (not in place)
+Sources* sources_remove(Sources* sources, size_t index) {
+
+    if (index < 0 || index >= sources->size) {
+        return sources;
+    }
+
+    Sources* out = sources_init();
+    
+    for (size_t i = 0; i < sources->size; i++) {
+        if (i != index) {
+            sources_add(out, source_clone(sources->sources[i]));
+        }
+    }
+
+    sources_free(sources);
+    return out;
+}
+
+
+// Gets the dependencies of a given source (as sources themselves)
 StringList* get_deps(StringList* tokens, size_t index) {
 
     StringList* out = strlist_init();
@@ -209,7 +235,9 @@ StringList* get_deps(StringList* tokens, size_t index) {
     return out;
 }
 
-//
+// Generates sources from a set of string tokens
+// Format:
+//      src: <name> [using <name>, <name>, ...]
 Sources* get_sources(StringList* tokens) {
 
     Sources* out = sources_init();
@@ -257,8 +285,12 @@ Sources* get_sources(StringList* tokens) {
 }
 
 
-//
+// Writes a source to a given file
 void write_source(FILE* fp, Source* source, bool isDep) {
+
+    if (source->deps == NULL) {
+        return;
+    }
 
     if (!isDep) {
         fprintf(fp, "%s: $(%s)\n", source->name->text, source->objsTag->text);
@@ -275,26 +307,41 @@ void write_source(FILE* fp, Source* source, bool isDep) {
 
 }
 
-// 
+
+// Removes duplicate dependencies (needed for Makefile writing)
 void remove_dupe_deps(Sources* sources) {
 
     StringList* noDupes = strlist_init();
 
     for (size_t i = 0; i < sources->size; i++) {
+
+        // printf("\ninit source:\n");
+        // source_print(sources->sources[i]);
+        // printf("num deps: %d\n", (int)sources->sources[i]->deps->size);
+        // printf("========================\n\n");
+
         for (size_t j = 0; j < sources->sources[i]->deps->size; j++) {
+
+            // strlist_print(noDupes);
+            // printf("\n");
+            // printf("check contain '%s'\n", sources->sources[i]->deps->sources[j]->name->text);
+            // printf("---------------\n");
+
             if (!strlist_contains(noDupes, sources->sources[i]->deps->sources[j]->name, true)) {
                 strlist_add(noDupes, str_init(sources->sources[i]->deps->sources[j]->name->text));
             } else {
-                source_free(sources->sources[i]->deps->sources[j]);
-                sources->sources[i]->deps->size--;
+                // printf("removing '%s' from '%s'\n", sources->sources[i]->deps->sources[j]->name->text, sources->sources[i]->name->text);
+                sources->sources[i]->deps = sources_remove(sources->sources[i]->deps, j);
+                j--;    // check again after remove (deps get shifted to the left)
             }
+
         }
     }
 
     strlist_free(noDupes);
 }
 
-//
+// Writes all sources to a Makefile (at given path)
 void write_makefile(Sources* sources, char* makepath) {
 
     FILE* fp = open_file(makepath, "w");
@@ -342,7 +389,7 @@ void write_makefile(Sources* sources, char* makepath) {
     fclose(fp);
 }
 
-//
+// Generates run/test bash scripts (at given path)
 void generate_scripts(Sources* sources, String* path) {
     printf("Generating bash scripts:\n\n");
     
@@ -386,7 +433,7 @@ valgrind -s --leak-check=full --track-origins=yes --show-leak-kinds=all ./$name 
 
 }
 
-//
+// Usage info
 void print_help() {
     printf("Usage: ./makemake <config filepath> <output filepath> {flags}\n");
     printf("Makefile generator\n\n");
@@ -398,7 +445,7 @@ void print_help() {
     printf("\n");
 }
 
-//
+// Main entrypoint
 int main(int argc, char** argv) {
 
     if (argc == 2 && !strcmp(argv[1], "--help")) {
